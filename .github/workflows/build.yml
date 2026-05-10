@@ -1,0 +1,104 @@
+name: CI
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install dependencies
+        run: ./bin/install-dev
+      - name: Lint
+        run: ./bin/lint
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install dependencies
+        run: ./bin/install-dev --no-lint
+      - id: test
+        name: Test
+        uses: freckle/stack-action@v5
+        with:
+          cache-prefix: test
+          stack-build-arguments: --fast --lock-file error-on-write
+
+  build:
+    needs:
+      - lint
+      - test
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    name: Build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: ./bin/install-dev --no-lint
+      - name: Set version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx \
+            --package semantic-release@25 \
+            --package semantic-release-replace-plugin@1 \
+            --package semantic-release-stop@1 \
+            semantic-release
+
+      - id: compile
+        name: Compile
+        uses: freckle/stack-action@v5
+        with:
+          cache-prefix: build
+          test: false
+      - name: Move executable
+        run: cp ${{ steps.compile.outputs.local-install-root }}/bin/mybox ./mybox-$(uname)-$(uname -m)
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: executable-${{ matrix.os }}-${{ matrix.arch || 'default' }}
+          path: mybox-*
+
+  publish:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: ./bin/install-dev --no-lint --no-haskell
+      - name: Download executables
+        uses: actions/download-artifact@v8
+        with:
+          pattern: 'executable-*'
+          merge-multiple: true
+          path: ./executables
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx \
+            --package semantic-release@25 \
+            semantic-release
