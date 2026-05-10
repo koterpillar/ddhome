@@ -13,6 +13,8 @@ license:        GPL-3.0-or-later
 build-type:     Simple
 
 library
+  exposed-modules:
+      DDHome.Main
   other-modules:
       Paths_ddhome
   autogen-modules:
