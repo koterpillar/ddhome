@@ -12,24 +12,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: ./bin/install-dev
       - name: Lint
         run: ./bin/lint
+
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: ./bin/install-dev --no-lint
-      - id: test
-        name: Test
-        uses: freckle/stack-action@v5
-        with:
-          cache-prefix: test
-          stack-build-arguments: --fast --lock-file error-on-write
+      - name: Test
+        run: ./bin/test
 
   build:
     needs:
@@ -41,25 +48,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: ./bin/install-dev --no-lint
-      - id: compile
-        name: Compile
-        uses: freckle/stack-action@v5
-        with:
-          cache-prefix: build
-          test: false
+      - name: Compile
+        run: cargo +stable build --release
       - name: Move executable
-        run: cp ${{ steps.compile.outputs.local-install-root }}/bin/mybox ./mybox-$(uname)-$(uname -m)
+        run: cp target/release/ddhome ./ddhome-$(uname)-$(uname -m)
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          name: executable-${{ matrix.os }}-${{ matrix.arch || 'default' }}
-          path: mybox-*
+          name: executable-${{ runner.os }}-${{ runner.arch }}
+          path: ddhome-*
 
   publish:
     needs:

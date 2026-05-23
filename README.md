@@ -20,17 +20,26 @@ Configuration can be split across multiple files.
 
 ### Address records
 
-FIXME
+```toml
+[address]
+a = true
+aaaa = true
+```
 
 ### Subdomains
 
-FIXME
+```toml
+[[subdomains]]
+name = "www"
+```
 
 ### Auxiliary records
 
-FIXME
+```toml
+[[txt]]
+content = "v=spf1 include:example.com ~all"
+```
 
 ### Provider configuration
 
 FIXME
-

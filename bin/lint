@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cargo +stable fmt --all --check
+cargo +stable clippy --all-targets -- -D warnings

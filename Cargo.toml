@@ -1,0 +1,12 @@
+[package]
+name = "ddhome"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+bunny-net-api = { version = "0.3.0", default-features = false, features = [
+  "core",
+] }
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.2"

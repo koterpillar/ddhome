@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+install_lint=true
+
+for arg in "$@"; do
+  case "$arg" in
+    --no-lint)
+      install_lint=false
+      ;;
+    *)
+      echo "Unknown argument: $arg" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if ! command -v rustup >/dev/null 2>&1; then
+  echo "rustup is required but was not found in PATH" >&2
+  exit 1
+fi
+
+rustup toolchain install stable --profile minimal
+
+if [[ "$install_lint" == "true" ]]; then
+  rustup component add --toolchain stable rustfmt clippy
+fi
+
+cargo fetch
