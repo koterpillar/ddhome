@@ -47,16 +47,6 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: ./bin/install-dev --no-lint
-      - name: Set version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npx \
-            --package semantic-release@25 \
-            --package semantic-release-replace-plugin@1 \
-            --package semantic-release-stop@1 \
-            semantic-release
-
       - id: compile
         name: Compile
         uses: freckle/stack-action@v5

@@ -1,3 +1,0 @@
-resolver: lts-24.39
-packages:
-- '.'
