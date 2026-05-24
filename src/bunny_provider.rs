@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use std::future::Future;
 use std::net::IpAddr;
 use std::sync::Mutex;
 
@@ -18,7 +17,7 @@ pub struct BunnyProvider {
 impl BunnyProvider {
     pub fn new(api_key: impl Into<String>, zone_id: i64) -> Self {
         Self {
-            client: CoreClient::new(&api_key.into()),
+            client: CoreClient::new(api_key.into()),
             zone_id,
             zone: Mutex::new(None),
         }
@@ -112,50 +111,42 @@ impl BunnyProvider {
 }
 
 impl Provider for BunnyProvider {
-    fn evaluate<'a>(
-        &'a self,
-        desire: &'a Desire,
-    ) -> impl Future<Output = Result<(), String>> + Send + 'a {
-        async move {
-            match desire {
-                Desire::Subdomain { name } => {
-                    if self.has_subdomain_cname_to_root(name).await? {
-                        Ok(())
-                    } else {
-                        Err(format!(
-                            "Bunny zone {} does not contain subdomain {} as a CNAME to the zone root",
-                            self.zone_id, name
-                        ))
-                    }
+    async fn evaluate(&self, desire: &Desire) -> Result<(), String> {
+        match desire {
+            Desire::Subdomain { name } => {
+                if self.has_subdomain_cname_to_root(name).await? {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Bunny zone {} does not contain subdomain {} as a CNAME to the zone root",
+                        self.zone_id, name
+                    ))
                 }
-                Desire::Address { value } => {
-                    if self.has_root_ip(*value).await? {
-                        Ok(())
-                    } else {
-                        Err(format!(
-                            "Bunny zone {} root record does not contain desired address {value}",
-                            self.zone_id
-                        ))
-                    }
+            }
+            Desire::Address { value } => {
+                if self.has_root_ip(*value).await? {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Bunny zone {} root record does not contain desired address {value}",
+                        self.zone_id
+                    ))
                 }
-                Desire::Txt { content } => {
-                    if self.has_root_txt_content(content).await? {
-                        Ok(())
-                    } else {
-                        Err(format!(
-                            "Bunny zone {} root TXT records do not contain desired content {:?}",
-                            self.zone_id, content
-                        ))
-                    }
+            }
+            Desire::Txt { content } => {
+                if self.has_root_txt_content(content).await? {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Bunny zone {} root TXT records do not contain desired content {:?}",
+                        self.zone_id, content
+                    ))
                 }
             }
         }
     }
 
-    fn apply<'a>(
-        &'a self,
-        _desire: &'a Desire,
-    ) -> impl Future<Output = Result<(), String>> + Send + 'a {
-        async move { Err("BunnyProvider apply is not implemented yet".to_owned()) }
+    async fn apply(&self, _desire: &Desire) -> Result<(), String> {
+        Err("BunnyProvider apply is not implemented yet".to_owned())
     }
 }

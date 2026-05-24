@@ -50,6 +50,32 @@ async fn desires_from_config(cfg: &config::Config) -> Result<Desires, String> {
     Ok(desires)
 }
 
+fn make_provider(cfg: &config::Config) -> Result<impl Provider + Sync, String> {
+    let bunny = cfg
+        .bunny
+        .as_ref()
+        .ok_or_else(|| "no provider configured; missing [bunny] section".to_owned())?;
+
+    let bunny_api_key = read_bunny_api_key()?;
+    Ok(BunnyProvider::new(bunny_api_key, bunny.zone_id))
+}
+
+async fn evaluate_desires(
+    provider: &(impl Provider + Sync),
+    desires: &Desires,
+) -> Result<(), String> {
+    for (desire, evaluation) in provider.evaluate_desires(desires).await {
+        match evaluation {
+            Ok(()) => println!("satisfied desire: {:?}", desire),
+            Err(explanation) => {
+                println!("mismatch for desire {:?}: {explanation}", desire)
+            }
+        }
+    }
+
+    Ok(())
+}
+
 async fn main_res() -> Result<(), String> {
     let config_path = env::args()
         .nth(1)
@@ -57,24 +83,10 @@ async fn main_res() -> Result<(), String> {
 
     let cfg = parse_config_path(&config_path)?;
     let desires = desires_from_config(&cfg).await?;
+    let provider = make_provider(&cfg)?;
 
-    if let Some(bunny) = &cfg.bunny {
-        let bunny_api_key = read_bunny_api_key()?;
-        let provider = BunnyProvider::new(bunny_api_key, bunny.zone_id);
+    evaluate_desires(&provider, &desires).await?;
 
-        for desire in &desires {
-            match provider.evaluate(desire).await {
-                Ok(()) => println!("satisfied desire: {:?}", desire),
-                Err(explanation) => {
-                    println!("mismatch for desire {:?}: {explanation}", desire)
-                }
-            }
-        }
-    } else {
-        println!("no [bunny] config; skipping provider evaluation");
-    }
-
-    println!("built {} desire(s)", desires.len());
     Ok(())
 }
 

@@ -6,17 +6,11 @@ use std::net::IpAddr;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Desire {
     /// Ensure a subdomain entry points back to the zone root.
-    Subdomain {
-        name: String,
-    },
+    Subdomain { name: String },
     /// Ensure an A or AAAA record exists with the given IP value.
-    Address {
-        value: IpAddr,
-    },
+    Address { value: IpAddr },
     /// Ensure a TXT record exists with the given content.
-    Txt {
-        content: String,
-    },
+    Txt { content: String },
 }
 
 /// A list of actionable desired DNS conditions.
