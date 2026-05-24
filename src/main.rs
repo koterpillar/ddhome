@@ -1,5 +1,6 @@
-use std::env;
 use std::net::IpAddr;
+
+use clap::Parser;
 
 mod bunny_auth;
 mod bunny_provider;
@@ -15,6 +16,15 @@ use config_parser::parse_config_path;
 use model::{Desire, Desires};
 use provider::Provider;
 use public_ip::{get_public_ipv4, get_public_ipv6};
+
+#[derive(Debug, Parser)]
+struct Args {
+    #[arg(long)]
+    apply: bool,
+
+    #[arg(default_value = "/etc/ddhome")]
+    config_path: String,
+}
 
 async fn desires_from_config(cfg: &config::Config) -> Result<Desires, String> {
     let mut desires = Vec::new();
@@ -60,15 +70,20 @@ fn make_provider(cfg: &config::Config) -> Result<impl Provider + Sync, String> {
     Ok(BunnyProvider::new(bunny_api_key, bunny.zone_id))
 }
 
-async fn evaluate_desires(
+async fn act(
     provider: &(impl Provider + Sync),
     desires: &Desires,
+    apply: bool,
 ) -> Result<(), String> {
     for (desire, evaluation) in provider.evaluate_desires(desires).await {
         match evaluation {
             Ok(()) => println!("satisfied desire: {:?}", desire),
             Err(explanation) => {
-                println!("mismatch for desire {:?}: {explanation}", desire)
+                println!("mismatch for desire {:?}: {explanation}", desire);
+                if apply {
+                    provider.apply(desire).await?;
+                    println!("applied desire {:?} successfully", desire);
+                }
             }
         }
     }
@@ -77,15 +92,13 @@ async fn evaluate_desires(
 }
 
 async fn main_res() -> Result<(), String> {
-    let config_path = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "/etc/ddhome".to_owned());
+    let args = Args::parse();
 
-    let cfg = parse_config_path(&config_path)?;
+    let cfg = parse_config_path(&args.config_path)?;
     let desires = desires_from_config(&cfg).await?;
     let provider = make_provider(&cfg)?;
 
-    evaluate_desires(&provider, &desires).await?;
+    act(&provider, &desires, args.apply).await?;
 
     Ok(())
 }

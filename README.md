@@ -16,6 +16,20 @@ The desired configuration is written in TOML files. When `ddhome` is run, it
 compares the desired configuration with the actual DNS records and makes updates
 as needed.
 
+By default, `ddhome` runs in check mode: it reports mismatches but does not
+change DNS records unless `--apply` is provided.
+
+```shell
+# Check desired state against DNS (default config path: /etc/ddhome)
+ddhome
+
+# Check with an explicit config path (file or directory)
+ddhome ./test-config/all.toml
+
+# Apply required DNS changes
+ddhome --apply ./test-config/all.toml
+```
+
 Configuration can be split across multiple files.
 
 ### Address records
