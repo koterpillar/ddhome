@@ -20,6 +20,8 @@ Configuration can be split across multiple files.
 
 ### Address records
 
+Set these to point the domain to the current IP address.
+
 ```toml
 [address]
 a = true
@@ -27,6 +29,8 @@ aaaa = true
 ```
 
 ### Subdomains
+
+Specify subdomains to be created as CNAME records pointing to the main domain.
 
 ```toml
 [[subdomain]]
@@ -52,5 +56,6 @@ zone_id = 123456
 The Bunny API key is read from the environment:
 
 ```bash
-export BUNNY_API_KEY=your_api_key_here
+read -s BUNNY_API_KEY
+export BUNNY_API_KEY
 ```
