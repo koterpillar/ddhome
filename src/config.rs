@@ -8,6 +8,8 @@ pub struct Config {
     pub subdomain: Vec<SubdomainConfig>,
     #[serde(default)]
     pub txt: Vec<TxtRecordConfig>,
+    #[serde(default)]
+    pub caa: Vec<CaaRecordConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,4 +33,11 @@ pub struct SubdomainConfig {
 #[derive(Debug, Deserialize)]
 pub struct TxtRecordConfig {
     pub content: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CaaRecordConfig {
+    pub ca: String,
+    #[serde(default)]
+    pub wildcards: bool,
 }

@@ -9,6 +9,8 @@ pub enum Desire {
     Address { value: IpAddr },
     /// Ensure a TXT record exists with the given content.
     Txt { content: String },
+    /// Ensure a CAA record exists for the given CA.
+    Caa { ca: String, wildcards: bool },
 }
 
 /// A list of actionable desired DNS conditions.

@@ -41,6 +41,13 @@ async fn desires_from_config(cfg: &config::Config) -> Result<Desires, String> {
         });
     }
 
+    for caa in &cfg.caa {
+        desires.push(Desire::Caa {
+            ca: caa.ca.clone(),
+            wildcards: caa.wildcards,
+        });
+    }
+
     if let Some(address) = &cfg.address {
         if address.a {
             let ip = get_public_ipv4().await?;

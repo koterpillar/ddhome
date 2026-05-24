@@ -38,6 +38,7 @@ fn merge_config(into: &mut Config, next: Config, source: &Path) -> Result<(), St
 
     into.subdomain.extend(next.subdomain);
     into.txt.extend(next.txt);
+    into.caa.extend(next.caa);
     Ok(())
 }
 
@@ -115,6 +116,7 @@ mod tests {
         let first = dir.join("10-address.toml");
         let second = dir.join("20-subdomain.toml");
         let third = dir.join("30-records.toml");
+        let fourth = dir.join("40-caa.toml");
 
         fs::write(
             &first,
@@ -144,6 +146,15 @@ content = "v=spf1 include:example.com ~all"
         )
         .expect("failed to write third config file");
 
+        fs::write(
+            &fourth,
+            r#"[[caa]]
+    ca = "example.com"
+    wildcards = true
+    "#,
+        )
+        .expect("failed to write fourth config file");
+
         let cfg = parse_config_dir(dir.to_str().expect("invalid temp dir path"))
             .expect("expected directory config parsing to succeed");
 
@@ -155,6 +166,9 @@ content = "v=spf1 include:example.com ~all"
         assert_eq!(cfg.subdomain[1].name, "api");
         assert_eq!(cfg.txt.len(), 1);
         assert_eq!(cfg.txt[0].content, "v=spf1 include:example.com ~all");
+        assert_eq!(cfg.caa.len(), 1);
+        assert_eq!(cfg.caa[0].ca, "example.com");
+        assert!(cfg.caa[0].wildcards);
 
         fs::remove_dir_all(&dir).expect("failed to remove temporary test directory");
     }

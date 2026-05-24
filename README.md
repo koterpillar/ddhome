@@ -56,7 +56,17 @@ name = "www"
 ```toml
 [[txt]]
 content = "v=spf1 include:example.com ~all"
+
+[[caa]]
+ca = "example.com"
+wildcards = false
+
+[[caa]]
+ca = "example.com"
+wildcards = true
 ```
+
+`[[caa]]` adds root CAA records. Use `ca` to name the certificate authority and `wildcards` to choose between `issue` and `issuewild`. Add multiple entries if you want more than one allowed CA or both wildcard and non-wildcard authorization.
 
 ### Provider configuration
 

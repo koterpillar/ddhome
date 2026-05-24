@@ -48,7 +48,7 @@ impl BunnyProvider {
         *self.zone.lock().expect("zone mutex poisoned") = None;
     }
 
-    fn is_root_record(record: &DnsRecord) -> bool {
+    fn is_apex_record(record: &DnsRecord) -> bool {
         record.name.is_empty() || record.name == "@"
     }
 
@@ -56,7 +56,70 @@ impl BunnyProvider {
         value.trim_end_matches('.')
     }
 
-    fn resolve_root_ip_record(zone: &DnsZone, value: IpAddr) -> RecordResolution {
+    fn caa_record_value(ca: &str, wildcards: bool) -> String {
+        let tag = if wildcards { "issuewild" } else { "issue" };
+        format!("0 {tag} \"{}\"", ca.trim().to_ascii_lowercase())
+    }
+
+    fn normalize_caa_value(value: &str) -> Option<String> {
+        let mut parts = value.split_whitespace();
+        let flags = parts.next()?;
+        let tag = parts.next()?;
+        let ca = parts.collect::<Vec<_>>().join(" ");
+
+        if flags != "0" || ca.is_empty() {
+            return None;
+        }
+
+        let tag = if tag.eq_ignore_ascii_case("issue") {
+            false
+        } else if tag.eq_ignore_ascii_case("issuewild") {
+            true
+        } else {
+            return None;
+        };
+
+        Some(Self::caa_record_value(ca.trim().trim_matches('"'), tag))
+    }
+
+    async fn has_caa(&self, ca: &str, wildcards: bool) -> Result<bool, String> {
+        let zone = self.zone().await?;
+        let expected = Self::caa_record_value(ca, wildcards);
+
+        Ok(zone
+            .records
+            .into_iter()
+            .filter(Self::is_apex_record)
+            .any(|record| {
+                record.record_type == Some(DnsRecordType::CAA)
+                    && Self::normalize_caa_value(&record.value)
+                        .as_deref()
+                        .is_some_and(|value| value == expected)
+            }))
+    }
+
+    async fn ensure_caa(&self, ca: &str, wildcards: bool) -> Result<(), String> {
+        if self.has_caa(ca, wildcards).await? {
+            return Ok(());
+        }
+
+        let req =
+            AddDnsRecord::new(DnsRecordType::CAA, Self::caa_record_value(ca, wildcards)).name("@");
+        self.client
+            .add_dns_record(self.zone_id, &req)
+            .await
+            .map_err(|e| {
+                format!(
+                    "failed to add root CAA record in zone {}: {e}",
+                    self.zone_id
+                )
+            })?;
+
+        self.invalidate_zone_cache();
+        Ok(())
+    }
+
+    fn resolve_ip_record(zone: &DnsZone, value: IpAddr) -> RecordResolution {
         let (record_type, expected_value) = match value {
             IpAddr::V4(v4) => (DnsRecordType::A, v4.to_string()),
             IpAddr::V6(v6) => (DnsRecordType::AAAA, v6.to_string()),
@@ -65,7 +128,7 @@ impl BunnyProvider {
         if let Some(existing) = zone
             .records
             .iter()
-            .find(|record| Self::is_root_record(record) && record.record_type == Some(record_type))
+            .find(|record| Self::is_apex_record(record) && record.record_type == Some(record_type))
         {
             if existing.value == expected_value {
                 RecordResolution::Match
@@ -77,23 +140,23 @@ impl BunnyProvider {
         }
     }
 
-    async fn has_root_ip(&self, expected: IpAddr) -> Result<bool, String> {
+    async fn has_ip(&self, expected: IpAddr) -> Result<bool, String> {
         let zone = self.zone().await?;
 
         Ok(matches!(
-            Self::resolve_root_ip_record(&zone, expected),
+            Self::resolve_ip_record(&zone, expected),
             RecordResolution::Match
         ))
     }
 
-    async fn upsert_root_ip(&self, value: IpAddr) -> Result<(), String> {
+    async fn upsert_ip(&self, value: IpAddr) -> Result<(), String> {
         let zone = self.zone().await?;
         let record_type = match value {
             IpAddr::V4(_) => DnsRecordType::A,
             IpAddr::V6(_) => DnsRecordType::AAAA,
         };
 
-        match Self::resolve_root_ip_record(&zone, value) {
+        match Self::resolve_ip_record(&zone, value) {
             RecordResolution::Match => return Ok(()),
             RecordResolution::Mismatch(existing) => {
                 let req =
@@ -127,20 +190,20 @@ impl BunnyProvider {
         Ok(())
     }
 
-    async fn has_root_txt_content(&self, expected: &str) -> Result<bool, String> {
+    async fn has_txt_content(&self, expected: &str) -> Result<bool, String> {
         let zone = self.zone().await?;
 
         Ok(zone
             .records
             .into_iter()
-            .filter(Self::is_root_record)
+            .filter(Self::is_apex_record)
             .any(|record| {
                 record.record_type == Some(DnsRecordType::TXT) && record.value == expected
             }))
     }
 
-    async fn ensure_root_txt(&self, content: &str) -> Result<(), String> {
-        if self.has_root_txt_content(content).await? {
+    async fn ensure_txt(&self, content: &str) -> Result<(), String> {
+        if self.has_txt_content(content).await? {
             return Ok(());
         }
 
@@ -159,7 +222,7 @@ impl BunnyProvider {
         Ok(())
     }
 
-    fn resolve_subdomain_cname_to_root_record(zone: &DnsZone, name: &str) -> RecordResolution {
+    fn resolve_subdomain_cname_record(zone: &DnsZone, name: &str) -> RecordResolution {
         let expected_target = Self::normalize_dns_name(&zone.domain);
 
         if let Some(existing) = zone
@@ -177,20 +240,20 @@ impl BunnyProvider {
         }
     }
 
-    async fn has_subdomain_cname_to_root(&self, name: &str) -> Result<bool, String> {
+    async fn has_subdomain_cname(&self, name: &str) -> Result<bool, String> {
         let zone = self.zone().await?;
 
         Ok(matches!(
-            Self::resolve_subdomain_cname_to_root_record(&zone, name),
+            Self::resolve_subdomain_cname_record(&zone, name),
             RecordResolution::Match
         ))
     }
 
-    async fn upsert_subdomain_cname_to_root(&self, name: &str) -> Result<(), String> {
+    async fn upsert_subdomain_cname(&self, name: &str) -> Result<(), String> {
         let zone = self.zone().await?;
         let expected_target = Self::normalize_dns_name(&zone.domain);
 
-        match Self::resolve_subdomain_cname_to_root_record(&zone, name) {
+        match Self::resolve_subdomain_cname_record(&zone, name) {
             RecordResolution::Match => return Ok(()),
             RecordResolution::Mismatch(existing) => {
                 let req = UpdateDnsRecord::new(existing.id, DnsRecordType::CNAME, expected_target)
@@ -229,32 +292,42 @@ impl Provider for BunnyProvider {
     async fn evaluate(&self, desire: &Desire) -> Result<(), String> {
         match desire {
             Desire::Subdomain { name } => {
-                if self.has_subdomain_cname_to_root(name).await? {
+                if self.has_subdomain_cname(name).await? {
                     Ok(())
                 } else {
                     Err(format!(
-                        "Bunny zone {} does not contain subdomain {} as a CNAME to the zone root",
+                        "Bunny zone {} does not contain subdomain {} as a CNAME to the zone apex",
                         self.zone_id, name
                     ))
                 }
             }
             Desire::Address { value } => {
-                if self.has_root_ip(*value).await? {
+                if self.has_ip(*value).await? {
                     Ok(())
                 } else {
                     Err(format!(
-                        "Bunny zone {} root record does not contain desired address {value}",
+                        "Bunny zone {} apex record does not contain desired address {value}",
                         self.zone_id
                     ))
                 }
             }
             Desire::Txt { content } => {
-                if self.has_root_txt_content(content).await? {
+                if self.has_txt_content(content).await? {
                     Ok(())
                 } else {
                     Err(format!(
-                        "Bunny zone {} root TXT records do not contain desired content {:?}",
+                        "Bunny zone {} apex TXT records do not contain desired content {:?}",
                         self.zone_id, content
+                    ))
+                }
+            }
+            Desire::Caa { ca, wildcards } => {
+                if self.has_caa(ca, *wildcards).await? {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Bunny zone {} apex CAA records do not contain desired CA {:?} with wildcards={}",
+                        self.zone_id, ca, wildcards
                     ))
                 }
             }
@@ -263,9 +336,10 @@ impl Provider for BunnyProvider {
 
     async fn apply(&self, desire: &Desire) -> Result<(), String> {
         match desire {
-            Desire::Subdomain { name } => self.upsert_subdomain_cname_to_root(name).await,
-            Desire::Address { value } => self.upsert_root_ip(*value).await,
-            Desire::Txt { content } => self.ensure_root_txt(content).await,
+            Desire::Subdomain { name } => self.upsert_subdomain_cname(name).await,
+            Desire::Address { value } => self.upsert_ip(*value).await,
+            Desire::Txt { content } => self.ensure_txt(content).await,
+            Desire::Caa { ca, wildcards } => self.ensure_caa(ca, *wildcards).await,
         }
     }
 }
