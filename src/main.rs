@@ -41,27 +41,14 @@ async fn fetch_bunny_root_a_records(api_key: &str, zone_id: i64) -> Result<Vec<I
     Ok(ips)
 }
 
-#[tokio::main]
-async fn main() {
-    let bunny_api_key = match read_bunny_api_key() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(1);
-        }
-    };
+async fn main_res() -> Result<(), String> {
+    let bunny_api_key = read_bunny_api_key()?;
 
     let config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "/etc/ddhome".to_owned());
 
-    let cfg = match parse_config_path(&config_path) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(1);
-        }
-    };
+    let cfg = parse_config_path(&config_path)?;
 
     if let Some(bunny) = &cfg.bunny {
         match fetch_bunny_root_a_records(&bunny_api_key, bunny.zone_id).await {
@@ -106,4 +93,16 @@ async fn main() {
     if let Some(first) = cfg.txt.first() {
         println!("first txt record length: {}", first.content.len());
     }
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    match main_res().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
 }
