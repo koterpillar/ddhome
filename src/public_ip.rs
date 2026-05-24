@@ -34,14 +34,18 @@ pub async fn get_public_ip(version: IpVersion) -> Result<IpAddr, String> {
 pub async fn get_public_ipv4() -> Result<Ipv4Addr, String> {
     match get_public_ip(IpVersion::V4).await? {
         IpAddr::V4(ip) => Ok(ip),
-        IpAddr::V6(_) => Err("endpoint returned an IPv6 address while IPv4 was requested".to_owned()),
+        IpAddr::V6(_) => {
+            Err("endpoint returned an IPv6 address while IPv4 was requested".to_owned())
+        }
     }
 }
 
 pub async fn get_public_ipv6() -> Result<Ipv6Addr, String> {
     match get_public_ip(IpVersion::V6).await? {
         IpAddr::V6(ip) => Ok(ip),
-        IpAddr::V4(_) => Err("endpoint returned an IPv4 address while IPv6 was requested".to_owned()),
+        IpAddr::V4(_) => {
+            Err("endpoint returned an IPv4 address while IPv6 was requested".to_owned())
+        }
     }
 }
 

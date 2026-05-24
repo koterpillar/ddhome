@@ -3,10 +3,10 @@ use std::net::Ipv4Addr;
 
 use bunny_net_api::core::{CoreClient, DnsRecordType};
 
+mod bunny_auth;
 mod config;
 mod config_parser;
 mod public_ip;
-mod bunny_auth;
 
 use bunny_auth::read_bunny_api_key;
 use config_parser::parse_config_path;
@@ -29,10 +29,12 @@ async fn fetch_bunny_root_a_records(api_key: &str, zone_id: i64) -> Result<Vec<I
             continue;
         }
 
-        let ip: Ipv4Addr = record
-            .value
-            .parse()
-            .map_err(|e| format!("invalid IPv4 value '{}' in Bunny DNS record {}: {e}", record.value, record.id))?;
+        let ip: Ipv4Addr = record.value.parse().map_err(|e| {
+            format!(
+                "invalid IPv4 value '{}' in Bunny DNS record {}: {e}",
+                record.value, record.id
+            )
+        })?;
         ips.push(ip);
     }
 

@@ -1,5 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cargo +stable fmt --all --check
+format_mode=false
+
+for arg in "$@"; do
+	case "$arg" in
+		--format)
+			format_mode=true
+			;;
+		*)
+			echo "Unknown argument: $arg" >&2
+			exit 1
+			;;
+	esac
+done
+
+if [[ "$format_mode" == "true" ]]; then
+	cargo +stable fmt --all
+else
+	cargo +stable fmt --all --check
+fi
+
 cargo +stable clippy --all-targets -- -D warnings
