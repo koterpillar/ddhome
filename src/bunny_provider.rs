@@ -50,37 +50,72 @@ impl BunnyProvider {
         value.trim_end_matches('.')
     }
 
+    fn resolve_root_ip_record(zone: &DnsZone, value: IpAddr) -> Result<(), Option<DnsRecord>> {
+        let (record_type, expected_value) = match value {
+            IpAddr::V4(v4) => (DnsRecordType::A, v4.to_string()),
+            IpAddr::V6(v6) => (DnsRecordType::AAAA, v6.to_string()),
+        };
+
+        if let Some(existing) = zone
+            .records
+            .iter()
+            .find(|record| Self::is_root_record(record) && record.record_type == Some(record_type))
+        {
+            if existing.value == expected_value {
+                Ok(())
+            } else {
+                Err(Some(existing.clone()))
+            }
+        } else {
+            Err(None)
+        }
+    }
+
     async fn has_root_ip(&self, expected: IpAddr) -> Result<bool, String> {
         let zone = self.zone().await?;
 
-        Ok(zone
-            .records
-            .into_iter()
-            .filter(Self::is_root_record)
-            .any(|record| match expected {
-                IpAddr::V4(expected_v4) => {
-                    if record.record_type != Some(DnsRecordType::A) {
-                        return false;
-                    }
+        Ok(Self::resolve_root_ip_record(&zone, expected).is_ok())
+    }
 
-                    if let Ok(actual_v4) = record.value.parse::<std::net::Ipv4Addr>() {
-                        return actual_v4 == expected_v4;
-                    }
+    async fn upsert_root_ip(&self, value: IpAddr) -> Result<(), String> {
+        let zone = self.zone().await?;
+        let record_type = match value {
+            IpAddr::V4(_) => DnsRecordType::A,
+            IpAddr::V6(_) => DnsRecordType::AAAA,
+        };
 
-                    false
-                }
-                IpAddr::V6(expected_v6) => {
-                    if record.record_type != Some(DnsRecordType::AAAA) {
-                        return false;
-                    }
+        match Self::resolve_root_ip_record(&zone, value) {
+            Ok(()) => return Ok(()),
+            Err(Some(existing)) => {
+                let req =
+                    UpdateDnsRecord::new(existing.id, record_type, value.to_string()).name("@");
 
-                    if let Ok(actual_v6) = record.value.parse::<std::net::Ipv6Addr>() {
-                        return actual_v6 == expected_v6;
-                    }
+                self.client
+                    .update_dns_record(self.zone_id, existing.id, &req)
+                    .await
+                    .map_err(|e| {
+                        format!(
+                            "failed to update {:?} root record in zone {}: {e}",
+                            record_type, self.zone_id
+                        )
+                    })?;
+            }
+            Err(None) => {
+                let req = AddDnsRecord::new(record_type, value.to_string()).name("@");
+                self.client
+                    .add_dns_record(self.zone_id, &req)
+                    .await
+                    .map_err(|e| {
+                        format!(
+                            "failed to add {:?} root record in zone {}: {e}",
+                            record_type, self.zone_id
+                        )
+                    })?;
+            }
+        }
 
-                    false
-                }
-            }))
+        self.invalidate_zone_cache();
+        Ok(())
     }
 
     async fn has_root_txt_content(&self, expected: &str) -> Result<bool, String> {
@@ -93,71 +128,6 @@ impl BunnyProvider {
             .any(|record| {
                 record.record_type == Some(DnsRecordType::TXT) && record.value == expected
             }))
-    }
-
-    async fn has_subdomain_cname_to_root(&self, name: &str) -> Result<bool, String> {
-        let zone = self.zone().await?;
-        let root_domain = zone.domain;
-        let expected_target = Self::normalize_dns_name(&root_domain);
-
-        Ok(zone.records.into_iter().any(|record| {
-            if record.record_type != Some(DnsRecordType::CNAME) {
-                return false;
-            }
-
-            if record.name != name {
-                return false;
-            }
-
-            Self::normalize_dns_name(&record.value) == expected_target
-        }))
-    }
-
-    async fn upsert_root_ip(&self, value: IpAddr) -> Result<(), String> {
-        let zone = self.zone().await?;
-        let (record_type, expected_value) = match value {
-            IpAddr::V4(v4) => (DnsRecordType::A, v4.to_string()),
-            IpAddr::V6(v6) => (DnsRecordType::AAAA, v6.to_string()),
-        };
-
-        if let Some(existing) = zone
-            .records
-            .iter()
-            .find(|record| Self::is_root_record(record) && record.record_type == Some(record_type))
-        {
-            if existing.value == expected_value {
-                return Ok(());
-            }
-
-            let mut req = UpdateDnsRecord::new(existing.id, record_type, expected_value.clone());
-            if !existing.name.is_empty() {
-                req = req.name(existing.name.clone());
-            }
-
-            self.client
-                .update_dns_record(self.zone_id, existing.id, &req)
-                .await
-                .map_err(|e| {
-                    format!(
-                        "failed to update {:?} root record in zone {}: {e}",
-                        record_type, self.zone_id
-                    )
-                })?;
-        } else {
-            let req = AddDnsRecord::new(record_type, expected_value).name("@");
-            self.client
-                .add_dns_record(self.zone_id, &req)
-                .await
-                .map_err(|e| {
-                    format!(
-                        "failed to add {:?} root record in zone {}: {e}",
-                        record_type, self.zone_id
-                    )
-                })?;
-        }
-
-        self.invalidate_zone_cache();
-        Ok(())
     }
 
     async fn ensure_root_txt(&self, content: &str) -> Result<(), String> {
@@ -180,9 +150,11 @@ impl BunnyProvider {
         Ok(())
     }
 
-    async fn upsert_subdomain_cname_to_root(&self, name: &str) -> Result<(), String> {
-        let zone = self.zone().await?;
-        let expected_target = Self::normalize_dns_name(&zone.domain).to_owned();
+    fn resolve_subdomain_cname_to_root_record(
+        zone: &DnsZone,
+        name: &str,
+    ) -> Result<(), Option<DnsRecord>> {
+        let expected_target = Self::normalize_dns_name(&zone.domain);
 
         if let Some(existing) = zone
             .records
@@ -190,32 +162,54 @@ impl BunnyProvider {
             .find(|record| record.name == name && record.record_type == Some(DnsRecordType::CNAME))
         {
             if Self::normalize_dns_name(&existing.value) == expected_target {
-                return Ok(());
+                Ok(())
+            } else {
+                Err(Some(existing.clone()))
             }
-
-            let req = UpdateDnsRecord::new(existing.id, DnsRecordType::CNAME, expected_target)
-                .name(name.to_owned());
-            self.client
-                .update_dns_record(self.zone_id, existing.id, &req)
-                .await
-                .map_err(|e| {
-                    format!(
-                        "failed to update CNAME record {name} in zone {}: {e}",
-                        self.zone_id
-                    )
-                })?;
         } else {
-            let req =
-                AddDnsRecord::new(DnsRecordType::CNAME, expected_target).name(name.to_owned());
-            self.client
-                .add_dns_record(self.zone_id, &req)
-                .await
-                .map_err(|e| {
-                    format!(
-                        "failed to add CNAME record {name} in zone {}: {e}",
-                        self.zone_id
-                    )
-                })?;
+            Err(None)
+        }
+    }
+
+    async fn has_subdomain_cname_to_root(&self, name: &str) -> Result<bool, String> {
+        let zone = self.zone().await?;
+
+        Ok(Self::resolve_subdomain_cname_to_root_record(&zone, name).is_ok())
+    }
+
+    async fn upsert_subdomain_cname_to_root(&self, name: &str) -> Result<(), String> {
+        let zone = self.zone().await?;
+        let expected_target = Self::normalize_dns_name(&zone.domain);
+
+        match Self::resolve_subdomain_cname_to_root_record(&zone, name) {
+            Ok(()) => return Ok(()),
+            Err(Some(existing)) => {
+                let req =
+                    UpdateDnsRecord::new(existing.id, DnsRecordType::CNAME, expected_target)
+                        .name(name.to_owned());
+                self.client
+                    .update_dns_record(self.zone_id, existing.id, &req)
+                    .await
+                    .map_err(|e| {
+                        format!(
+                            "failed to update CNAME record {name} in zone {}: {e}",
+                            self.zone_id
+                        )
+                    })?;
+            }
+            Err(None) => {
+                let req =
+                    AddDnsRecord::new(DnsRecordType::CNAME, expected_target).name(name.to_owned());
+                self.client
+                    .add_dns_record(self.zone_id, &req)
+                    .await
+                    .map_err(|e| {
+                        format!(
+                            "failed to add CNAME record {name} in zone {}: {e}",
+                            self.zone_id
+                        )
+                    })?;
+            }
         }
 
         self.invalidate_zone_cache();
