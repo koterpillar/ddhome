@@ -14,6 +14,12 @@ pub struct BunnyProvider {
     zone: Mutex<Option<DnsZone>>,
 }
 
+enum RecordResolution {
+    Match,
+    Missing,
+    Mismatch(Box<DnsRecord>),
+}
+
 impl BunnyProvider {
     pub fn new(api_key: impl Into<String>, zone_id: i64) -> Self {
         Self {
@@ -50,7 +56,7 @@ impl BunnyProvider {
         value.trim_end_matches('.')
     }
 
-    fn resolve_root_ip_record(zone: &DnsZone, value: IpAddr) -> Result<(), Option<DnsRecord>> {
+    fn resolve_root_ip_record(zone: &DnsZone, value: IpAddr) -> RecordResolution {
         let (record_type, expected_value) = match value {
             IpAddr::V4(v4) => (DnsRecordType::A, v4.to_string()),
             IpAddr::V6(v6) => (DnsRecordType::AAAA, v6.to_string()),
@@ -62,19 +68,22 @@ impl BunnyProvider {
             .find(|record| Self::is_root_record(record) && record.record_type == Some(record_type))
         {
             if existing.value == expected_value {
-                Ok(())
+                RecordResolution::Match
             } else {
-                Err(Some(existing.clone()))
+                RecordResolution::Mismatch(Box::new(existing.clone()))
             }
         } else {
-            Err(None)
+            RecordResolution::Missing
         }
     }
 
     async fn has_root_ip(&self, expected: IpAddr) -> Result<bool, String> {
         let zone = self.zone().await?;
 
-        Ok(Self::resolve_root_ip_record(&zone, expected).is_ok())
+        Ok(matches!(
+            Self::resolve_root_ip_record(&zone, expected),
+            RecordResolution::Match
+        ))
     }
 
     async fn upsert_root_ip(&self, value: IpAddr) -> Result<(), String> {
@@ -85,8 +94,8 @@ impl BunnyProvider {
         };
 
         match Self::resolve_root_ip_record(&zone, value) {
-            Ok(()) => return Ok(()),
-            Err(Some(existing)) => {
+            RecordResolution::Match => return Ok(()),
+            RecordResolution::Mismatch(existing) => {
                 let req =
                     UpdateDnsRecord::new(existing.id, record_type, value.to_string()).name("@");
 
@@ -100,7 +109,7 @@ impl BunnyProvider {
                         )
                     })?;
             }
-            Err(None) => {
+            RecordResolution::Missing => {
                 let req = AddDnsRecord::new(record_type, value.to_string()).name("@");
                 self.client
                     .add_dns_record(self.zone_id, &req)
@@ -150,10 +159,7 @@ impl BunnyProvider {
         Ok(())
     }
 
-    fn resolve_subdomain_cname_to_root_record(
-        zone: &DnsZone,
-        name: &str,
-    ) -> Result<(), Option<DnsRecord>> {
+    fn resolve_subdomain_cname_to_root_record(zone: &DnsZone, name: &str) -> RecordResolution {
         let expected_target = Self::normalize_dns_name(&zone.domain);
 
         if let Some(existing) = zone
@@ -162,19 +168,22 @@ impl BunnyProvider {
             .find(|record| record.name == name && record.record_type == Some(DnsRecordType::CNAME))
         {
             if Self::normalize_dns_name(&existing.value) == expected_target {
-                Ok(())
+                RecordResolution::Match
             } else {
-                Err(Some(existing.clone()))
+                RecordResolution::Mismatch(Box::new(existing.clone()))
             }
         } else {
-            Err(None)
+            RecordResolution::Missing
         }
     }
 
     async fn has_subdomain_cname_to_root(&self, name: &str) -> Result<bool, String> {
         let zone = self.zone().await?;
 
-        Ok(Self::resolve_subdomain_cname_to_root_record(&zone, name).is_ok())
+        Ok(matches!(
+            Self::resolve_subdomain_cname_to_root_record(&zone, name),
+            RecordResolution::Match
+        ))
     }
 
     async fn upsert_subdomain_cname_to_root(&self, name: &str) -> Result<(), String> {
@@ -182,11 +191,10 @@ impl BunnyProvider {
         let expected_target = Self::normalize_dns_name(&zone.domain);
 
         match Self::resolve_subdomain_cname_to_root_record(&zone, name) {
-            Ok(()) => return Ok(()),
-            Err(Some(existing)) => {
-                let req =
-                    UpdateDnsRecord::new(existing.id, DnsRecordType::CNAME, expected_target)
-                        .name(name.to_owned());
+            RecordResolution::Match => return Ok(()),
+            RecordResolution::Mismatch(existing) => {
+                let req = UpdateDnsRecord::new(existing.id, DnsRecordType::CNAME, expected_target)
+                    .name(name.to_owned());
                 self.client
                     .update_dns_record(self.zone_id, existing.id, &req)
                     .await
@@ -197,7 +205,7 @@ impl BunnyProvider {
                         )
                     })?;
             }
-            Err(None) => {
+            RecordResolution::Missing => {
                 let req =
                     AddDnsRecord::new(DnsRecordType::CNAME, expected_target).name(name.to_owned());
                 self.client
