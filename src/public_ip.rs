@@ -10,7 +10,7 @@ pub enum IpVersion {
     V6,
 }
 
-pub fn get_public_ip(version: IpVersion) -> Result<IpAddr, String> {
+pub async fn get_public_ip(version: IpVersion) -> Result<IpAddr, String> {
     let endpoints = match version {
         IpVersion::V4 => &IPV4_ENDPOINTS,
         IpVersion::V6 => &IPV6_ENDPOINTS,
@@ -18,7 +18,7 @@ pub fn get_public_ip(version: IpVersion) -> Result<IpAddr, String> {
 
     let mut errors = Vec::new();
     for endpoint in endpoints {
-        match fetch_ip(endpoint, version) {
+        match fetch_ip(endpoint, version).await {
             Ok(ip) => return Ok(ip),
             Err(err) => errors.push(format!("{endpoint}: {err}")),
         }
@@ -31,22 +31,22 @@ pub fn get_public_ip(version: IpVersion) -> Result<IpAddr, String> {
     ))
 }
 
-pub fn get_public_ipv4() -> Result<Ipv4Addr, String> {
-    match get_public_ip(IpVersion::V4)? {
+pub async fn get_public_ipv4() -> Result<Ipv4Addr, String> {
+    match get_public_ip(IpVersion::V4).await? {
         IpAddr::V4(ip) => Ok(ip),
         IpAddr::V6(_) => Err("endpoint returned an IPv6 address while IPv4 was requested".to_owned()),
     }
 }
 
-pub fn get_public_ipv6() -> Result<Ipv6Addr, String> {
-    match get_public_ip(IpVersion::V6)? {
+pub async fn get_public_ipv6() -> Result<Ipv6Addr, String> {
+    match get_public_ip(IpVersion::V6).await? {
         IpAddr::V6(ip) => Ok(ip),
         IpAddr::V4(_) => Err("endpoint returned an IPv4 address while IPv6 was requested".to_owned()),
     }
 }
 
-fn fetch_ip(endpoint: &str, version: IpVersion) -> Result<IpAddr, String> {
-    let client = reqwest::blocking::Client::builder()
+async fn fetch_ip(endpoint: &str, version: IpVersion) -> Result<IpAddr, String> {
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("failed to create HTTP client: {e}"))?;
@@ -54,11 +54,14 @@ fn fetch_ip(endpoint: &str, version: IpVersion) -> Result<IpAddr, String> {
     let response = client
         .get(endpoint)
         .send()
-        .and_then(|r| r.error_for_status())
+        .await
+        .map_err(|e| format!("request failed: {e}"))?
+        .error_for_status()
         .map_err(|e| format!("request failed: {e}"))?;
 
     let raw = response
         .text()
+        .await
         .map_err(|e| format!("failed to read response body: {e}"))?;
     let ip: IpAddr = raw
         .trim()

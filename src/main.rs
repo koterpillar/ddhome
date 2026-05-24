@@ -1,13 +1,54 @@
 use std::env;
+use std::net::Ipv4Addr;
+
+use bunny_net_api::core::{CoreClient, DnsRecordType};
 
 mod config;
 mod config_parser;
 mod public_ip;
+mod bunny_auth;
 
+use bunny_auth::read_bunny_api_key;
 use config_parser::parse_config_path;
 use public_ip::{get_public_ipv4, get_public_ipv6};
 
-fn main() {
+async fn fetch_bunny_root_a_records(api_key: &str, zone_id: i64) -> Result<Vec<Ipv4Addr>, String> {
+    let client = CoreClient::new(api_key);
+    let zone = client
+        .get_dns_zone(zone_id)
+        .await
+        .map_err(|e| format!("failed to fetch DNS zone {zone_id}: {e}"))?;
+
+    let mut ips = Vec::new();
+    for record in zone.records {
+        if record.record_type != Some(DnsRecordType::A) {
+            continue;
+        }
+
+        if !(record.name.is_empty() || record.name == "@") {
+            continue;
+        }
+
+        let ip: Ipv4Addr = record
+            .value
+            .parse()
+            .map_err(|e| format!("invalid IPv4 value '{}' in Bunny DNS record {}: {e}", record.value, record.id))?;
+        ips.push(ip);
+    }
+
+    Ok(ips)
+}
+
+#[tokio::main]
+async fn main() {
+    let bunny_api_key = match read_bunny_api_key() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+
     let config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "/etc/ddhome".to_owned());
@@ -20,6 +61,20 @@ fn main() {
         }
     };
 
+    if let Some(bunny) = &cfg.bunny {
+        match fetch_bunny_root_a_records(&bunny_api_key, bunny.zone_id).await {
+            Ok(ips) if ips.is_empty() => {
+                println!("no Bunny root A records found in zone {}", bunny.zone_id)
+            }
+            Ok(ips) => {
+                println!("Bunny root A records in zone {}: {:?}", bunny.zone_id, ips)
+            }
+            Err(e) => {
+                eprintln!("failed to query Bunny A records: {e}");
+            }
+        }
+    }
+
     println!("loaded config");
     if let Some(address) = &cfg.address {
         println!(
@@ -28,14 +83,14 @@ fn main() {
         );
 
         if address.a {
-            match get_public_ipv4() {
+            match get_public_ipv4().await {
                 Ok(ip) => println!("detected public IPv4: {ip}"),
                 Err(e) => eprintln!("failed to detect public IPv4: {e}"),
             }
         }
 
         if address.aaaa {
-            match get_public_ipv6() {
+            match get_public_ipv6().await {
                 Ok(ip) => println!("detected public IPv6: {ip}"),
                 Err(e) => eprintln!("failed to detect public IPv6: {e}"),
             }

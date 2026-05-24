@@ -2,11 +2,17 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
+    pub bunny: Option<BunnyConfig>,
     pub address: Option<AddressConfig>,
     #[serde(default)]
     pub subdomains: Vec<SubdomainConfig>,
     #[serde(default)]
     pub txt: Vec<TxtRecordConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BunnyConfig {
+    pub zone_id: i64,
 }
 
 #[derive(Debug, Deserialize)]

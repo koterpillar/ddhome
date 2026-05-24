@@ -14,11 +14,22 @@ pub fn parse_config_file(path: &str) -> Result<Config, String> {
 }
 
 fn merge_config(into: &mut Config, next: Config, source: &Path) -> Result<(), String> {
+    if into.bunny.is_some() && next.bunny.is_some() {
+        return Err(format!(
+            "duplicate [bunny] section found while merging {}",
+            source.display()
+        ));
+    }
+
     if into.address.is_some() && next.address.is_some() {
         return Err(format!(
             "duplicate [address] section found while merging {}",
             source.display()
         ));
+    }
+
+    if into.bunny.is_none() {
+        into.bunny = next.bunny;
     }
 
     if into.address.is_none() {

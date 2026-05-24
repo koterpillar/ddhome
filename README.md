@@ -42,4 +42,15 @@ content = "v=spf1 include:example.com ~all"
 
 ### Provider configuration
 
-FIXME
+```toml
+[bunny]
+zone_id = 123456
+```
+
+`zone_id` is the Bunny DNS zone ID.
+
+The Bunny API key is read from the environment:
+
+```bash
+export BUNNY_API_KEY=your_api_key_here
+```
