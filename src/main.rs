@@ -19,6 +19,18 @@ use public_ip::{get_public_ipv4, get_public_ipv6};
 async fn desires_from_config(cfg: &config::Config) -> Result<Desires, String> {
     let mut desires = Vec::new();
 
+    for subdomain in &cfg.subdomain {
+        desires.push(Desire::Subdomain {
+            name: subdomain.name.clone(),
+        });
+    }
+
+    for txt in &cfg.txt {
+        desires.push(Desire::Txt {
+            content: txt.content.clone(),
+        });
+    }
+
     if let Some(address) = &cfg.address {
         if address.a {
             let ip = get_public_ipv4().await?;

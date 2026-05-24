@@ -5,7 +5,7 @@ pub struct Config {
     pub bunny: Option<BunnyConfig>,
     pub address: Option<AddressConfig>,
     #[serde(default)]
-    pub subdomains: Vec<SubdomainConfig>,
+    pub subdomain: Vec<SubdomainConfig>,
     #[serde(default)]
     pub txt: Vec<TxtRecordConfig>,
 }

@@ -36,7 +36,7 @@ fn merge_config(into: &mut Config, next: Config, source: &Path) -> Result<(), St
         into.address = next.address;
     }
 
-    into.subdomains.extend(next.subdomains);
+    into.subdomain.extend(next.subdomain);
     into.txt.extend(next.txt);
     Ok(())
 }
@@ -113,7 +113,7 @@ mod tests {
         let dir = make_temp_dir();
 
         let first = dir.join("10-address.toml");
-        let second = dir.join("20-subdomains.toml");
+        let second = dir.join("20-subdomain.toml");
         let third = dir.join("30-records.toml");
 
         fs::write(
@@ -127,7 +127,7 @@ aaaa = false
 
         fs::write(
             &second,
-            r#"[[subdomains]]
+            r#"[[subdomain]]
 name = "www"
     "#,
         )
@@ -135,7 +135,7 @@ name = "www"
 
         fs::write(
             &third,
-            r#"[[subdomains]]
+            r#"[[subdomain]]
     name = "api"
 
 [[txt]]
@@ -150,9 +150,9 @@ content = "v=spf1 include:example.com ~all"
         let address = cfg.address.expect("expected merged address section");
         assert!(address.a);
         assert!(!address.aaaa);
-        assert_eq!(cfg.subdomains.len(), 2);
-        assert_eq!(cfg.subdomains[0].name, "www");
-        assert_eq!(cfg.subdomains[1].name, "api");
+        assert_eq!(cfg.subdomain.len(), 2);
+        assert_eq!(cfg.subdomain[0].name, "www");
+        assert_eq!(cfg.subdomain[1].name, "api");
         assert_eq!(cfg.txt.len(), 1);
         assert_eq!(cfg.txt[0].content, "v=spf1 include:example.com ~all");
 

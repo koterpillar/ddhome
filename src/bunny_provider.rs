@@ -2,65 +2,112 @@
 
 use std::future::Future;
 use std::net::IpAddr;
+use std::sync::Mutex;
 
-use bunny_net_api::core::{CoreClient, DnsRecordType};
+use bunny_net_api::core::{CoreClient, DnsRecord, DnsRecordType, DnsZone};
 
 use crate::model::Desire;
 use crate::provider::Provider;
 
 pub struct BunnyProvider {
-    api_key: String,
+    client: CoreClient,
     zone_id: i64,
+    zone: Mutex<Option<DnsZone>>,
 }
 
 impl BunnyProvider {
     pub fn new(api_key: impl Into<String>, zone_id: i64) -> Self {
         Self {
-            api_key: api_key.into(),
+            client: CoreClient::new(&api_key.into()),
             zone_id,
+            zone: Mutex::new(None),
         }
     }
 
-    async fn has_root_ip(&self, expected: IpAddr) -> Result<bool, String> {
-        let client = CoreClient::new(&self.api_key);
-        let zone = client
+    async fn zone(&self) -> Result<DnsZone, String> {
+        if let Some(zone) = self.zone.lock().expect("zone mutex poisoned").clone() {
+            return Ok(zone);
+        }
+
+        let zone = self
+            .client
             .get_dns_zone(self.zone_id)
             .await
             .map_err(|e| format!("failed to fetch DNS zone {}: {e}", self.zone_id))?;
 
-        for record in zone.records {
-            let is_root = record.name.is_empty() || record.name == "@";
-            if !is_root {
-                continue;
-            }
+        *self.zone.lock().expect("zone mutex poisoned") = Some(zone.clone());
+        Ok(zone)
+    }
 
-            match expected {
+    fn is_root_record(record: &DnsRecord) -> bool {
+        record.name.is_empty() || record.name == "@"
+    }
+
+    fn normalize_dns_name(value: &str) -> &str {
+        value.trim_end_matches('.')
+    }
+
+    async fn has_root_ip(&self, expected: IpAddr) -> Result<bool, String> {
+        let zone = self.zone().await?;
+
+        Ok(zone
+            .records
+            .into_iter()
+            .filter(Self::is_root_record)
+            .any(|record| match expected {
                 IpAddr::V4(expected_v4) => {
                     if record.record_type != Some(DnsRecordType::A) {
-                        continue;
+                        return false;
                     }
 
                     if let Ok(actual_v4) = record.value.parse::<std::net::Ipv4Addr>() {
-                        if actual_v4 == expected_v4 {
-                            return Ok(true);
-                        }
+                        return actual_v4 == expected_v4;
                     }
+
+                    false
                 }
                 IpAddr::V6(expected_v6) => {
                     if record.record_type != Some(DnsRecordType::AAAA) {
-                        continue;
+                        return false;
                     }
 
                     if let Ok(actual_v6) = record.value.parse::<std::net::Ipv6Addr>() {
-                        if actual_v6 == expected_v6 {
-                            return Ok(true);
-                        }
+                        return actual_v6 == expected_v6;
                     }
-                }
-            }
-        }
 
-        Ok(false)
+                    false
+                }
+            }))
+    }
+
+    async fn has_root_txt_content(&self, expected: &str) -> Result<bool, String> {
+        let zone = self.zone().await?;
+
+        Ok(zone
+            .records
+            .into_iter()
+            .filter(Self::is_root_record)
+            .any(|record| {
+                record.record_type == Some(DnsRecordType::TXT) && record.value == expected
+            }))
+    }
+
+    async fn has_subdomain_cname_to_root(&self, name: &str) -> Result<bool, String> {
+        let zone = self.zone().await?;
+        let root_domain = zone.domain;
+        let expected_target = Self::normalize_dns_name(&root_domain);
+
+        Ok(zone.records.into_iter().any(|record| {
+            if record.record_type != Some(DnsRecordType::CNAME) {
+                return false;
+            }
+
+            if record.name != name {
+                return false;
+            }
+
+            Self::normalize_dns_name(&record.value) == expected_target
+        }))
     }
 }
 
@@ -71,6 +118,16 @@ impl Provider for BunnyProvider {
     ) -> impl Future<Output = Result<(), String>> + Send + 'a {
         async move {
             match desire {
+                Desire::Subdomain { name } => {
+                    if self.has_subdomain_cname_to_root(name).await? {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "Bunny zone {} does not contain subdomain {} as a CNAME to the zone root",
+                            self.zone_id, name
+                        ))
+                    }
+                }
                 Desire::Address { value } => {
                     if self.has_root_ip(*value).await? {
                         Ok(())
@@ -81,9 +138,16 @@ impl Provider for BunnyProvider {
                         ))
                     }
                 }
-                Desire::Txt { .. } => Err(
-                    "BunnyProvider currently only supports Address desires for evaluate".to_owned(),
-                ),
+                Desire::Txt { content } => {
+                    if self.has_root_txt_content(content).await? {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "Bunny zone {} root TXT records do not contain desired content {:?}",
+                            self.zone_id, content
+                        ))
+                    }
+                }
             }
         }
     }

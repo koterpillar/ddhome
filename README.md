@@ -29,7 +29,7 @@ aaaa = true
 ### Subdomains
 
 ```toml
-[[subdomains]]
+[[subdomain]]
 name = "www"
 ```
 
