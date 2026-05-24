@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::net::IpAddr;
 
 /// A single actionable desired DNS condition.

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::model::{Desire, Desires};
 
 pub type Evaluation<'a> = (&'a Desire, Result<(), String>);
