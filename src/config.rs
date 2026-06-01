@@ -48,10 +48,6 @@ pub struct CaaRecordConfig {
 
 impl CaaRecordConfig {
     pub fn to_caa_record(&self) -> CaaRecord {
-        CaaRecord::new(
-            &self.ca,
-            self.wildcards,
-            self.account_uri.as_deref(),
-        )
+        CaaRecord::new(&self.ca, self.wildcards, self.account_uri.as_deref())
     }
 }

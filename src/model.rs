@@ -24,7 +24,12 @@ impl CaaRecord {
         let tag = if self.wildcards { "issuewild" } else { "issue" };
         let issuer = self.ca.trim().to_ascii_lowercase();
 
-        if let Some(account_uri) = self.account_uri.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+        if let Some(account_uri) = self
+            .account_uri
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
             format!("0 {tag} \"{issuer}; accounturi={account_uri}\"")
         } else {
             format!("0 {tag} \"{issuer}\"")
