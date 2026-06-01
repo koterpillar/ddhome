@@ -42,10 +42,7 @@ async fn desires_from_config(cfg: &config::Config) -> Result<Desires, String> {
     }
 
     for caa in &cfg.caa {
-        desires.push(Desire::Caa {
-            ca: caa.ca.clone(),
-            wildcards: caa.wildcards,
-        });
+        desires.push(Desire::Caa(caa.to_caa_record()));
     }
 
     if let Some(address) = &cfg.address {

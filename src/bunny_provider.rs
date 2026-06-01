@@ -5,7 +5,7 @@ use bunny_net_api::core::{
     AddDnsRecord, CoreClient, DnsRecord, DnsRecordType, DnsZone, UpdateDnsRecord,
 };
 
-use crate::model::Desire;
+use crate::model::{CaaRecord, Desire};
 use crate::provider::Provider;
 
 pub struct BunnyProvider {
@@ -56,35 +56,8 @@ impl BunnyProvider {
         value.trim_end_matches('.')
     }
 
-    fn caa_record_value(ca: &str, wildcards: bool) -> String {
-        let tag = if wildcards { "issuewild" } else { "issue" };
-        format!("0 {tag} \"{}\"", ca.trim().to_ascii_lowercase())
-    }
-
-    fn normalize_caa_value(value: &str) -> Option<String> {
-        let mut parts = value.split_whitespace();
-        let flags = parts.next()?;
-        let tag = parts.next()?;
-        let ca = parts.collect::<Vec<_>>().join(" ");
-
-        if flags != "0" || ca.is_empty() {
-            return None;
-        }
-
-        let tag = if tag.eq_ignore_ascii_case("issue") {
-            false
-        } else if tag.eq_ignore_ascii_case("issuewild") {
-            true
-        } else {
-            return None;
-        };
-
-        Some(Self::caa_record_value(ca.trim().trim_matches('"'), tag))
-    }
-
-    async fn has_caa(&self, ca: &str, wildcards: bool) -> Result<bool, String> {
+    async fn has_caa(&self, caa_record: &CaaRecord) -> Result<bool, String> {
         let zone = self.zone().await?;
-        let expected = Self::caa_record_value(ca, wildcards);
 
         Ok(zone
             .records
@@ -92,19 +65,17 @@ impl BunnyProvider {
             .filter(Self::is_apex_record)
             .any(|record| {
                 record.record_type == Some(DnsRecordType::CAA)
-                    && Self::normalize_caa_value(&record.value)
-                        .as_deref()
-                        .is_some_and(|value| value == expected)
+                    && CaaRecord::parse_dns_value(&record.value)
+                        .is_some_and(|value| value == *caa_record)
             }))
     }
 
-    async fn ensure_caa(&self, ca: &str, wildcards: bool) -> Result<(), String> {
-        if self.has_caa(ca, wildcards).await? {
+    async fn ensure_caa(&self, caa_record: &CaaRecord) -> Result<(), String> {
+        if self.has_caa(caa_record).await? {
             return Ok(());
         }
 
-        let req =
-            AddDnsRecord::new(DnsRecordType::CAA, Self::caa_record_value(ca, wildcards)).name("@");
+        let req = AddDnsRecord::new(DnsRecordType::CAA, caa_record.to_dns_value()).name("@");
         self.client
             .add_dns_record(self.zone_id, &req)
             .await
@@ -321,13 +292,13 @@ impl Provider for BunnyProvider {
                     ))
                 }
             }
-            Desire::Caa { ca, wildcards } => {
-                if self.has_caa(ca, *wildcards).await? {
+            Desire::Caa(caa_record) => {
+                if self.has_caa(caa_record).await? {
                     Ok(())
                 } else {
                     Err(format!(
-                        "Bunny zone {} apex CAA records do not contain desired CA {:?} with wildcards={}",
-                        self.zone_id, ca, wildcards
+                        "Bunny zone {} apex CAA records do not contain desired record {}",
+                        self.zone_id, caa_record
                     ))
                 }
             }
@@ -339,7 +310,7 @@ impl Provider for BunnyProvider {
             Desire::Subdomain { name } => self.upsert_subdomain_cname(name).await,
             Desire::Address { value } => self.upsert_ip(*value).await,
             Desire::Txt { content } => self.ensure_txt(content).await,
-            Desire::Caa { ca, wildcards } => self.ensure_caa(ca, *wildcards).await,
+            Desire::Caa(caa_record) => self.ensure_caa(caa_record).await,
         }
     }
 }

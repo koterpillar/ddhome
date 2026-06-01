@@ -151,6 +151,11 @@ content = "v=spf1 include:example.com ~all"
             r#"[[caa]]
     ca = "example.com"
     wildcards = true
+
+[[caa]]
+    ca = "example.com"
+    wildcards = false
+    account_uri = "https://example.com/acme/acct/123456"
     "#,
         )
         .expect("failed to write fourth config file");
@@ -166,9 +171,16 @@ content = "v=spf1 include:example.com ~all"
         assert_eq!(cfg.subdomain[1].name, "api");
         assert_eq!(cfg.txt.len(), 1);
         assert_eq!(cfg.txt[0].content, "v=spf1 include:example.com ~all");
-        assert_eq!(cfg.caa.len(), 1);
+        assert_eq!(cfg.caa.len(), 2);
         assert_eq!(cfg.caa[0].ca, "example.com");
         assert!(cfg.caa[0].wildcards);
+        assert!(cfg.caa[0].account_uri.is_none());
+        assert_eq!(cfg.caa[1].ca, "example.com");
+        assert!(!cfg.caa[1].wildcards);
+        assert_eq!(
+            cfg.caa[1].account_uri.as_deref(),
+            Some("https://example.com/acme/acct/123456")
+        );
 
         fs::remove_dir_all(&dir).expect("failed to remove temporary test directory");
     }

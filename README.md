@@ -64,9 +64,14 @@ wildcards = false
 [[caa]]
 ca = "example.com"
 wildcards = true
+
+[[caa]]
+ca = "example.com"
+wildcards = false
+account_uri = "https://example.com/acme/acct/123456"
 ```
 
-`[[caa]]` adds root CAA records. Use `ca` to name the certificate authority and `wildcards` to choose between `issue` and `issuewild`. Add multiple entries if you want more than one allowed CA or both wildcard and non-wildcard authorization.
+`[[caa]]` adds root CAA records. Use `ca` to name the certificate authority and `wildcards` to choose between `issue` and `issuewild`. Set optional `account_uri` to include the RFC 8657 `accounturi` parameter for ACME account binding.
 
 ### Provider configuration
 

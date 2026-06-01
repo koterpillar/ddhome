@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::model::CaaRecord;
+
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
     pub bunny: Option<BunnyConfig>,
@@ -40,4 +42,16 @@ pub struct CaaRecordConfig {
     pub ca: String,
     #[serde(default)]
     pub wildcards: bool,
+    #[serde(default)]
+    pub account_uri: Option<String>,
+}
+
+impl CaaRecordConfig {
+    pub fn to_caa_record(&self) -> CaaRecord {
+        CaaRecord::new(
+            &self.ca,
+            self.wildcards,
+            self.account_uri.as_deref(),
+        )
+    }
 }
