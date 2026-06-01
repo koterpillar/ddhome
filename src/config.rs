@@ -44,10 +44,17 @@ pub struct CaaRecordConfig {
     pub wildcards: bool,
     #[serde(default)]
     pub account_uri: Option<String>,
+    #[serde(default)]
+    pub validation_methods: Option<Vec<String>>,
 }
 
 impl CaaRecordConfig {
     pub fn to_caa_record(&self) -> CaaRecord {
-        CaaRecord::new(&self.ca, self.wildcards, self.account_uri.as_deref())
+        CaaRecord::new(
+            &self.ca,
+            self.wildcards,
+            self.account_uri.as_deref(),
+            self.validation_methods.as_deref(),
+        )
     }
 }

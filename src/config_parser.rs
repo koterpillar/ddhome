@@ -156,6 +156,7 @@ content = "v=spf1 include:example.com ~all"
     ca = "example.com"
     wildcards = false
     account_uri = "https://example.com/acme/acct/123456"
+    validation_methods = ["dns-01", "http-01"]
     "#,
         )
         .expect("failed to write fourth config file");
@@ -180,6 +181,10 @@ content = "v=spf1 include:example.com ~all"
         assert_eq!(
             cfg.caa[1].account_uri.as_deref(),
             Some("https://example.com/acme/acct/123456")
+        );
+        assert_eq!(
+            cfg.caa[1].validation_methods.as_deref(),
+            Some(["dns-01".to_owned(), "http-01".to_owned(),].as_slice())
         );
 
         fs::remove_dir_all(&dir).expect("failed to remove temporary test directory");

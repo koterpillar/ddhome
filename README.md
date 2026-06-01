@@ -69,9 +69,10 @@ wildcards = true
 ca = "example.com"
 wildcards = false
 account_uri = "https://example.com/acme/acct/123456"
+validation_methods = ["dns-01", "http-01"]
 ```
 
-`[[caa]]` adds root CAA records. Use `ca` to name the certificate authority and `wildcards` to choose between `issue` and `issuewild`. Set optional `account_uri` to include the RFC 8657 `accounturi` parameter for ACME account binding.
+`[[caa]]` adds root CAA records. Use `ca` to name the certificate authority and `wildcards` to choose between `issue` and `issuewild`. Set optional `account_uri` to include the RFC 8657 `accounturi` parameter for ACME account binding. Set optional `validation_methods` to include the RFC 8657 `validationmethods` parameter (for example, `dns-01` and `http-01`).
 
 ### Provider configuration
 

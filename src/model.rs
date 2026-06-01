@@ -6,10 +6,16 @@ pub struct CaaRecord {
     pub ca: String,
     pub wildcards: bool,
     pub account_uri: Option<String>,
+    pub validation_methods: Option<Vec<String>>,
 }
 
 impl CaaRecord {
-    pub fn new(ca: &str, wildcards: bool, account_uri: Option<&str>) -> Self {
+    pub fn new(
+        ca: &str,
+        wildcards: bool,
+        account_uri: Option<&str>,
+        validation_methods: Option<&[String]>,
+    ) -> Self {
         Self {
             ca: ca.trim().to_ascii_lowercase(),
             wildcards,
@@ -17,6 +23,15 @@ impl CaaRecord {
                 .map(str::trim)
                 .filter(|v| !v.is_empty())
                 .map(str::to_owned),
+            validation_methods: validation_methods
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .map(|method| method.trim().to_ascii_lowercase())
+                        .filter(|method| !method.is_empty())
+                        .collect::<Vec<_>>()
+                })
+                .filter(|methods| !methods.is_empty()),
         }
     }
 
@@ -24,16 +39,25 @@ impl CaaRecord {
         let tag = if self.wildcards { "issuewild" } else { "issue" };
         let issuer = self.ca.trim().to_ascii_lowercase();
 
+        let mut value = issuer;
+
         if let Some(account_uri) = self
             .account_uri
             .as_deref()
             .map(str::trim)
             .filter(|v| !v.is_empty())
         {
-            format!("0 {tag} \"{issuer}; accounturi={account_uri}\"")
-        } else {
-            format!("0 {tag} \"{issuer}\"")
+            value.push_str("; accounturi=");
+            value.push_str(account_uri);
         }
+
+        if let Some(validation_methods) = self.validation_methods.as_ref().filter(|m| !m.is_empty())
+        {
+            value.push_str("; validationmethods=");
+            value.push_str(&validation_methods.join(","));
+        }
+
+        format!("0 {tag} \"{value}\"")
     }
 
     pub fn parse_dns_value(value: &str) -> Option<Self> {
@@ -71,6 +95,7 @@ impl CaaRecord {
         }
 
         let mut account_uri: Option<String> = None;
+        let mut validation_methods: Option<Vec<String>> = None;
 
         for segment in segments {
             let segment = segment.trim();
@@ -79,13 +104,7 @@ impl CaaRecord {
             }
 
             let (parameter, value) = segment.split_once('=')?;
-            if !parameter.trim().eq_ignore_ascii_case("accounturi") {
-                return None;
-            }
-
-            if account_uri.is_some() {
-                return None;
-            }
+            let parameter = parameter.trim();
 
             let value = value.trim();
             let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
@@ -98,10 +117,38 @@ impl CaaRecord {
                 return None;
             }
 
-            account_uri = Some(value.to_owned());
+            if parameter.eq_ignore_ascii_case("accounturi") {
+                if account_uri.is_some() {
+                    return None;
+                }
+
+                account_uri = Some(value.to_owned());
+            } else if parameter.eq_ignore_ascii_case("validationmethods") {
+                if validation_methods.is_some() {
+                    return None;
+                }
+
+                let methods = value
+                    .split(',')
+                    .map(|method| method.trim().to_ascii_lowercase())
+                    .collect::<Vec<_>>();
+
+                if methods.is_empty() || methods.iter().any(|method| method.is_empty()) {
+                    return None;
+                }
+
+                validation_methods = Some(methods);
+            } else {
+                return None;
+            }
         }
 
-        Some(Self::new(issuer, wildcards, account_uri.as_deref()))
+        Some(Self::new(
+            issuer,
+            wildcards,
+            account_uri.as_deref(),
+            validation_methods.as_deref(),
+        ))
     }
 }
 
@@ -137,6 +184,7 @@ mod tests {
             "example.com",
             false,
             Some("https://example.com/acme/acct/123456"),
+            None,
         )
         .to_dns_value();
 
@@ -144,5 +192,53 @@ mod tests {
             value,
             "0 issue \"example.com; accounturi=https://example.com/acme/acct/123456\""
         );
+    }
+
+    #[test]
+    fn caa_record_value_includes_validation_methods_parameter() {
+        let methods = vec!["dns-01".to_owned(), "http-01".to_owned()];
+        let value = CaaRecord::new("example.com", false, None, Some(&methods)).to_dns_value();
+
+        assert_eq!(
+            value,
+            "0 issue \"example.com; validationmethods=dns-01,http-01\""
+        );
+    }
+
+    #[test]
+    fn parse_caa_value_with_validation_methods() {
+        let parsed =
+            CaaRecord::parse_dns_value("0 issue \"example.com; validationmethods=dns-01,http-01\"")
+                .expect("expected CAA value to parse");
+
+        assert_eq!(parsed.ca, "example.com");
+        assert!(!parsed.wildcards);
+        assert!(parsed.account_uri.is_none());
+        assert_eq!(
+            parsed.validation_methods,
+            Some(vec!["dns-01".to_owned(), "http-01".to_owned()])
+        );
+    }
+
+    #[test]
+    fn parse_caa_value_with_account_uri_and_validation_methods() {
+        let parsed = CaaRecord::parse_dns_value(
+            "0 issue \"example.com; accounturi=https://example.com/acme/acct/123456; validationmethods=dns-01\"",
+        )
+        .expect("expected CAA value to parse");
+
+        assert_eq!(
+            parsed.to_dns_value(),
+            "0 issue \"example.com; accounturi=https://example.com/acme/acct/123456; validationmethods=dns-01\""
+        );
+    }
+
+    #[test]
+    fn parse_caa_value_rejects_empty_validation_method() {
+        let parsed = CaaRecord::parse_dns_value(
+            "0 issue \"example.com; validationmethods=dns-01,,http-01\"",
+        );
+
+        assert!(parsed.is_none());
     }
 }
