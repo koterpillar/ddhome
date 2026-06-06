@@ -93,7 +93,10 @@ impl CaaRecord {
             let parameter = parameter.trim();
 
             let param_value = param_value.trim();
-            let param_value = if param_value.starts_with('"') && param_value.ends_with('"') && param_value.len() >= 2 {
+            let param_value = if param_value.starts_with('"')
+                && param_value.ends_with('"')
+                && param_value.len() >= 2
+            {
                 &param_value[1..param_value.len() - 1]
             } else {
                 param_value
@@ -185,13 +188,11 @@ mod tests {
     #[test]
     fn caa_record_value_includes_validation_methods_parameter() {
         let methods = vec!["dns-01".to_owned(), "http-01".to_owned()];
-        let (tag, value) = CaaRecord::new("example.com", false, None, Some(&methods)).to_dns_value();
+        let (tag, value) =
+            CaaRecord::new("example.com", false, None, Some(&methods)).to_dns_value();
 
         assert_eq!(tag, "issue");
-        assert_eq!(
-            value,
-            "example.com; validationmethods=dns-01,http-01"
-        );
+        assert_eq!(value, "example.com; validationmethods=dns-01,http-01");
     }
 
     #[test]
@@ -227,10 +228,8 @@ mod tests {
 
     #[test]
     fn parse_caa_value_rejects_empty_validation_method() {
-        let parsed = CaaRecord::parse_dns_value(
-            "issue",
-            "example.com; validationmethods=dns-01,,http-01",
-        );
+        let parsed =
+            CaaRecord::parse_dns_value("issue", "example.com; validationmethods=dns-01,,http-01");
 
         assert!(parsed.is_none());
     }
