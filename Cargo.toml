@@ -9,6 +9,7 @@ bunny-net-api = { version = "0.3.0", default-features = false, features = [
 ] }
 clap = { version = "4.5.51", features = ["derive"] }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
+semigroup = { version = "0.6.0", features = ["derive", "monoid"] }
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.52.0", features = ["macros", "rt-multi-thread"] }
 toml = "1.1.2"

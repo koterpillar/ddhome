@@ -1,16 +1,23 @@
+use semigroup::Semigroup;
 use serde::Deserialize;
 
 use crate::model::CaaRecord;
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Semigroup)]
+#[semigroup(monoid)]
 pub struct Config {
+    #[semigroup(with = "semigroup::op::Overwrite")]
     pub bunny: Option<BunnyConfig>,
+    #[semigroup(with = "semigroup::op::Overwrite")]
     pub address: Option<AddressConfig>,
     #[serde(default)]
+    #[semigroup(with = "semigroup::op::Concat")]
     pub subdomain: Vec<SubdomainConfig>,
     #[serde(default)]
+    #[semigroup(with = "semigroup::op::Concat")]
     pub txt: Vec<TxtRecordConfig>,
     #[serde(default)]
+    #[semigroup(with = "semigroup::op::Concat")]
     pub caa: Vec<CaaRecordConfig>,
 }
 

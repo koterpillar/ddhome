@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use semigroup::{Monoid, Semigroup};
+
 use crate::config::Config;
 
 fn parse_config(input: &str) -> Result<Config, String> {
@@ -11,35 +13,6 @@ pub fn parse_config_file(path: &str) -> Result<Config, String> {
     let input =
         fs::read_to_string(path).map_err(|e| format!("failed to read config file {path}: {e}"))?;
     parse_config(&input).map_err(|e| format!("failed to parse config file {path}: {e}"))
-}
-
-fn merge_config(into: &mut Config, next: Config, source: &Path) -> Result<(), String> {
-    if into.bunny.is_some() && next.bunny.is_some() {
-        return Err(format!(
-            "duplicate [bunny] section found while merging {}",
-            source.display()
-        ));
-    }
-
-    if into.address.is_some() && next.address.is_some() {
-        return Err(format!(
-            "duplicate [address] section found while merging {}",
-            source.display()
-        ));
-    }
-
-    if into.bunny.is_none() {
-        into.bunny = next.bunny;
-    }
-
-    if into.address.is_none() {
-        into.address = next.address;
-    }
-
-    into.subdomain.extend(next.subdomain);
-    into.txt.extend(next.txt);
-    into.caa.extend(next.caa);
-    Ok(())
 }
 
 pub fn parse_config_dir(path: &str) -> Result<Config, String> {
@@ -67,11 +40,11 @@ pub fn parse_config_dir(path: &str) -> Result<Config, String> {
         return Err(format!("no .toml files found in {}", dir.display()));
     }
 
-    let mut merged = Config::default();
+    let mut merged = Config::identity();
     for file in files {
         let file_path = file.to_string_lossy();
         let cfg = parse_config_file(&file_path)?;
-        merge_config(&mut merged, cfg, &file)?;
+        merged = merged.semigroup(cfg);
     }
 
     Ok(merged)
