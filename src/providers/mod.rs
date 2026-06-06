@@ -1,4 +1,5 @@
 pub mod bunny;
+mod util;
 
 use crate::model::{Desire, Desires};
 
