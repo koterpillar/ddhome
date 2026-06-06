@@ -35,7 +35,7 @@ impl CaaRecord {
         }
     }
 
-    pub fn to_dns_value(&self) -> String {
+    pub fn to_dns_value(&self) -> (String, String) {
         let tag = if self.wildcards { "issuewild" } else { "issue" };
         let issuer = self.ca.trim().to_ascii_lowercase();
 
@@ -57,19 +57,10 @@ impl CaaRecord {
             value.push_str(&validation_methods.join(","));
         }
 
-        format!("0 {tag} \"{value}\"")
+        (tag.to_owned(), value)
     }
 
-    pub fn parse_dns_value(value: &str) -> Option<Self> {
-        let mut parts = value.split_whitespace();
-        let flags = parts.next()?;
-        let tag = parts.next()?;
-        let issuer_and_params = parts.collect::<Vec<_>>().join(" ");
-
-        if flags != "0" || issuer_and_params.is_empty() {
-            return None;
-        }
-
+    pub fn parse_dns_value(tag: &str, value: &str) -> Option<Self> {
         let wildcards = if tag.eq_ignore_ascii_case("issue") {
             false
         } else if tag.eq_ignore_ascii_case("issuewild") {
@@ -78,17 +69,12 @@ impl CaaRecord {
             return None;
         };
 
-        let issuer_and_params = issuer_and_params.trim();
-        let issuer_and_params = if issuer_and_params.starts_with('"')
-            && issuer_and_params.ends_with('"')
-            && issuer_and_params.len() >= 2
-        {
-            &issuer_and_params[1..issuer_and_params.len() - 1]
-        } else {
-            issuer_and_params
-        };
+        let value = value.trim();
+        if value.is_empty() {
+            return None;
+        }
 
-        let mut segments = issuer_and_params.split(';');
+        let mut segments = value.split(';');
         let issuer = segments.next()?.trim();
         if issuer.is_empty() {
             return None;
@@ -103,17 +89,17 @@ impl CaaRecord {
                 continue;
             }
 
-            let (parameter, value) = segment.split_once('=')?;
+            let (parameter, param_value) = segment.split_once('=')?;
             let parameter = parameter.trim();
 
-            let value = value.trim();
-            let value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
-                &value[1..value.len() - 1]
+            let param_value = param_value.trim();
+            let param_value = if param_value.starts_with('"') && param_value.ends_with('"') && param_value.len() >= 2 {
+                &param_value[1..param_value.len() - 1]
             } else {
-                value
+                param_value
             };
 
-            if value.is_empty() {
+            if param_value.is_empty() {
                 return None;
             }
 
@@ -122,13 +108,13 @@ impl CaaRecord {
                     return None;
                 }
 
-                account_uri = Some(value.to_owned());
+                account_uri = Some(param_value.to_owned());
             } else if parameter.eq_ignore_ascii_case("validationmethods") {
                 if validation_methods.is_some() {
                     return None;
                 }
 
-                let methods = value
+                let methods = param_value
                     .split(',')
                     .map(|method| method.trim().to_ascii_lowercase())
                     .collect::<Vec<_>>();
@@ -154,7 +140,8 @@ impl CaaRecord {
 
 impl fmt::Display for CaaRecord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_dns_value())
+        let (tag, value) = self.to_dns_value();
+        write!(f, "0 {} \"{}\"", tag, value)
     }
 }
 
@@ -180,7 +167,7 @@ mod tests {
 
     #[test]
     fn caa_record_value_includes_account_uri_parameter() {
-        let value = CaaRecord::new(
+        let (tag, value) = CaaRecord::new(
             "example.com",
             false,
             Some("https://example.com/acme/acct/123456"),
@@ -188,27 +175,29 @@ mod tests {
         )
         .to_dns_value();
 
+        assert_eq!(tag, "issue");
         assert_eq!(
             value,
-            "0 issue \"example.com; accounturi=https://example.com/acme/acct/123456\""
+            "example.com; accounturi=https://example.com/acme/acct/123456"
         );
     }
 
     #[test]
     fn caa_record_value_includes_validation_methods_parameter() {
         let methods = vec!["dns-01".to_owned(), "http-01".to_owned()];
-        let value = CaaRecord::new("example.com", false, None, Some(&methods)).to_dns_value();
+        let (tag, value) = CaaRecord::new("example.com", false, None, Some(&methods)).to_dns_value();
 
+        assert_eq!(tag, "issue");
         assert_eq!(
             value,
-            "0 issue \"example.com; validationmethods=dns-01,http-01\""
+            "example.com; validationmethods=dns-01,http-01"
         );
     }
 
     #[test]
     fn parse_caa_value_with_validation_methods() {
         let parsed =
-            CaaRecord::parse_dns_value("0 issue \"example.com; validationmethods=dns-01,http-01\"")
+            CaaRecord::parse_dns_value("issue", "example.com; validationmethods=dns-01,http-01")
                 .expect("expected CAA value to parse");
 
         assert_eq!(parsed.ca, "example.com");
@@ -223,20 +212,24 @@ mod tests {
     #[test]
     fn parse_caa_value_with_account_uri_and_validation_methods() {
         let parsed = CaaRecord::parse_dns_value(
-            "0 issue \"example.com; accounturi=https://example.com/acme/acct/123456; validationmethods=dns-01\"",
+            "issue",
+            "example.com; accounturi=https://example.com/acme/acct/123456; validationmethods=dns-01",
         )
         .expect("expected CAA value to parse");
 
+        let (tag, value) = parsed.to_dns_value();
+        assert_eq!(tag, "issue");
         assert_eq!(
-            parsed.to_dns_value(),
-            "0 issue \"example.com; accounturi=https://example.com/acme/acct/123456; validationmethods=dns-01\""
+            value,
+            "example.com; accounturi=https://example.com/acme/acct/123456; validationmethods=dns-01"
         );
     }
 
     #[test]
     fn parse_caa_value_rejects_empty_validation_method() {
         let parsed = CaaRecord::parse_dns_value(
-            "0 issue \"example.com; validationmethods=dns-01,,http-01\"",
+            "issue",
+            "example.com; validationmethods=dns-01,,http-01",
         );
 
         assert!(parsed.is_none());

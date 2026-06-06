@@ -65,8 +65,10 @@ impl BunnyProvider {
             .filter(Self::is_apex_record)
             .any(|record| {
                 record.record_type == Some(DnsRecordType::CAA)
-                    && CaaRecord::parse_dns_value(&record.value)
-                        .is_some_and(|value| value == *caa_record)
+                    && record.tag.as_ref().is_some_and(|tag| {
+                        CaaRecord::parse_dns_value(tag, &record.value)
+                            .is_some_and(|parsed| parsed == *caa_record)
+                    })
             }))
     }
 
@@ -75,7 +77,10 @@ impl BunnyProvider {
             return Ok(());
         }
 
-        let req = AddDnsRecord::new(DnsRecordType::CAA, caa_record.to_dns_value()).name("@");
+        let (tag, value) = caa_record.to_dns_value();
+        let req = AddDnsRecord::new(DnsRecordType::CAA, value)
+            .tag(&tag)
+            .name("@");
         self.client
             .add_dns_record(self.zone_id, &req)
             .await
