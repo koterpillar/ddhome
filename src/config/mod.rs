@@ -1,7 +1,11 @@
+pub mod parser;
+
 use semigroup::Semigroup;
 use serde::Deserialize;
 
 use crate::model::CaaRecord;
+
+pub use parser::parse_config_path;
 
 #[derive(Debug, Deserialize, Semigroup)]
 #[semigroup(monoid)]

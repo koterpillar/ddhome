@@ -2,19 +2,15 @@ use std::net::IpAddr;
 
 use clap::Parser;
 
-mod bunny_auth;
-mod bunny_provider;
 mod config;
-mod config_parser;
 mod model;
-mod provider;
+mod providers;
 mod public_ip;
 
-use bunny_auth::read_bunny_api_key;
-use bunny_provider::BunnyProvider;
-use config_parser::parse_config_path;
+use config::parse_config_path;
 use model::{Desire, Desires};
-use provider::Provider;
+use providers::Provider;
+use providers::bunny::{BunnyProvider, read_bunny_api_key};
 use public_ip::{get_public_ipv4, get_public_ipv6};
 
 #[derive(Debug, Parser)]

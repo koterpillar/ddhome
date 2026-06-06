@@ -1,3 +1,5 @@
+pub mod auth;
+
 use std::net::IpAddr;
 use std::sync::Mutex;
 
@@ -6,7 +8,9 @@ use bunny_net_api::core::{
 };
 
 use crate::model::{CaaRecord, Desire};
-use crate::provider::Provider;
+use crate::providers::Provider;
+
+pub use auth::read_bunny_api_key;
 
 pub struct BunnyProvider {
     client: CoreClient,
