@@ -4,7 +4,8 @@ This tool maintains a home server DNS records written in a declarative way. It
 points a domain name to a dynamic IP, adds subdomain CNAME records and handles
 auxiliary records like TXT and CAA.
 
-It is similar to `ddclient`, but supports more than just a dynamic A record.
+It is similar to [ddclient](https://ddclient.net/), but supports more than just
+a dynamic A record.
 
 ## Status
 
@@ -56,7 +57,11 @@ name = "www"
 ```toml
 [[txt]]
 content = "v=spf1 include:example.com ~all"
+```
 
+### CAA records
+
+```toml
 [[caa]]
 ca = "example.com"
 wildcards = false
@@ -72,9 +77,17 @@ account_uri = "https://example.com/acme/acct/123456"
 validation_methods = ["dns-01", "http-01"]
 ```
 
-`[[caa]]` adds root CAA records. Use `ca` to name the certificate authority and `wildcards` to choose between `issue` and `issuewild`. Set optional `account_uri` to include the RFC 8657 `accounturi` parameter for ACME account binding. Set optional `validation_methods` to include the RFC 8657 `validationmethods` parameter (for example, `dns-01` and `http-01`).
+`[[caa]]` adds root CAA records as defined by [RFC
+8659](https://www.rfc-editor.org/rfc/rfc8659.html). Use `ca` to name the
+certificate authority and `wildcards` to choose between `issue` and `issuewild`.
+Set optional `account_uri` to include the [RFC
+8657](https://www.rfc-editor.org/rfc/rfc8657.html) `accounturi` parameter for
+ACME account binding. Set optional `validation_methods` to include the RFC 8657
+`validationmethods` parameter (for example, `dns-01` and `http-01`).
 
 ### Provider configuration
+
+The only supported provider at the moment is [Bunny DNS](https://bunny.net/dns/).
 
 ```toml
 [bunny]
