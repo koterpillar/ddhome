@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Rust Cache
@@ -47,7 +47,7 @@ jobs:
     name: Build
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Rust Cache
@@ -73,7 +73,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Setup Node.js
