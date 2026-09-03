@@ -12,4 +12,4 @@ reqwest = { version = "0.13.4", default-features = false, features = ["blocking"
 semigroup = { version = "0.6.0", features = ["derive", "monoid"] }
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
-toml = "1.1.4"
+toml = "1.1.5"
