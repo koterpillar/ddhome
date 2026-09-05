@@ -3,7 +3,6 @@
   extends: [
     "config:recommended",
     ":automergeMinor",
-    "github>koterpillar/renovate-haskell:default.json5",
   ],
   rangeStrategy: "bump",
   customManagers: [
