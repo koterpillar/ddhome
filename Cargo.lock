@@ -119,9 +119,9 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "bunny-net-api"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65977179df7aa58c204bf124505c4209198e44b87a2024c8b5946419cd38f95a"
+checksum = "7bc8c71023473ed7178390129d239be86a33b88f62418862506addb4b330a2a3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -130,7 +130,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "serde_repr",
  "urlencoding",
 ]
 
@@ -1292,17 +1291,6 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
-]
-
-[[package]]
-name = "serde_repr"
-version = "0.1.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d3b1629de253c70a0508c3899572da79ca359fdab27c7920ff00406df418906"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.9",
 ]
 
 [[package]]
