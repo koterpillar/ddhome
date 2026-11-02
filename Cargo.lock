@@ -119,9 +119,9 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "bunny-net-api"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4297f68a5e0a0001ee55a7f17705be60605d9be5d8b4333b5de7a980f6be1c3b"
+checksum = "2ebbadd296856c2d47c31ecc19bcd76b7f8c1b18fa3c4b93099590bde840c96c"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
