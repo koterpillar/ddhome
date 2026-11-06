@@ -1222,9 +1222,9 @@ dependencies = [
 
 [[package]]
 name = "semigroup"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93bacd6095858c7a9d7f77562d4c84e2d04a25f9989f11e867ead694958b42df"
+checksum = "c8b39a99e32ecb87d0bdbdf40ee75936321b3c9888feba21fe0d7921a6cfad39"
 dependencies = [
  "num",
  "semigroup_derive",
