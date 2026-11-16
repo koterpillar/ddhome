@@ -93,5 +93,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npx \
-            --package semantic-release@25 \
+            --package semantic-release@26 \
             semantic-release
